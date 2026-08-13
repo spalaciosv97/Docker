@@ -1,0 +1,20 @@
+
+=== Invalidos ANTES de recompilar ===================================
+
+ INVALIDOS                                                                                                                                                                                              
+----------                                                                                                                                                                                              
+        19                                                                                                                                                                                              
+
+
+PL/SQL procedure successfully completed.
+
+
+PL/SQL procedure successfully completed.
+
+
+=== Invalidos DESPUES de recompilar (debe ser 0) ====================
+
+ INVALIDOS                                                                                                                                                                                              
+----------                                                                                                                                                                                              
+         0                                                                                                                                                                                              
+

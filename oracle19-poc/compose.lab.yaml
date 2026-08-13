@@ -1,0 +1,53 @@
+# =====================================================================
+# compose.lab.yaml — Entorno LAB descartable
+#
+# Deliberadamente separado del oracle19-poc original: distinto nombre
+# de contenedor, distinto volumen y distinto puerto, para poder
+# destruir este sin tocar la base que ya funciona.
+#
+#   Levantar:  docker compose -p oracle19-lab -f compose.lab.yaml up -d
+#   Logs:      docker compose -p oracle19-lab -f compose.lab.yaml logs -f
+#   Bajar:     docker compose -p oracle19-lab -f compose.lab.yaml down
+#
+#   BORRAR TODO (solo el lab):
+#              docker compose -p oracle19-lab -f compose.lab.yaml down -v
+#
+# Antes de cualquier "down -v", confirmar con:
+#              docker volume ls | grep oracle19
+# que el volumen que se va a borrar sea oracle19-lab_oracle19_lab_data
+# y NO el volumen del proyecto original.
+# =====================================================================
+
+services:
+  oracle:
+    image: local/oracle19c-se2:19.3.0
+    container_name: oracle19-lab
+    ports:
+      # 1522 en el host para no chocar con el oracle19-poc original,
+      # que ya ocupa el 1521.
+      - "127.0.0.1:1522:1521"
+    environment:
+      ORACLE_SID: DEMOCDB
+      ORACLE_PDB: DEMOPDB
+      ORACLE_PWD: Oracle_Poc_2026
+      ORACLE_CHARACTERSET: AL32UTF8
+      ORACLE_NCHAR_CHARACTERSET: AL16UTF16
+    volumes:
+      - oracle19_lab_data:/opt/oracle/oradata
+      # Los scripts se montan de solo lectura: el contenedor los ejecuta
+      # pero no puede modificarlos.
+      - ./setup:/poc/setup:ro
+      - ./install.sh:/poc/install.sh:ro
+      # Los logs SI necesitan escritura, y quedan visibles desde el host
+      # para revisarlos sin entrar al contenedor.
+      - ./logs:/poc/logs
+    healthcheck:
+      test: ["CMD", "/opt/oracle/checkDBStatus.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 40
+      start_period: 15m
+    shm_size: 1gb
+
+volumes:
+  oracle19_lab_data:

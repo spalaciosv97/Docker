@@ -1,0 +1,45 @@
+--------------------------------------------------------
+--  DDL for Package PKG_VALIDATOR
+--------------------------------------------------------
+
+  CREATE OR REPLACE EDITIONABLE PACKAGE "GENERALIDADES"."PKG_VALIDATOR" AS
+
+    FUNCTION RULE(
+        p_name  IN VARCHAR2,
+        p_value IN VARCHAR2,
+        p_rules IN VARCHAR2
+    ) RETURN T_RULE;
+
+    FUNCTION RULE(
+        p_name  IN VARCHAR2,
+        p_value IN NUMBER,
+        p_rules IN VARCHAR2
+    ) RETURN T_RULE;
+
+    FUNCTION RULE(
+        p_name     IN VARCHAR2,
+        p_value    IN DATE,
+        p_rules    IN VARCHAR2,
+        p_min_date IN DATE DEFAULT NULL,
+        p_max_date IN DATE DEFAULT NULL
+    ) RETURN T_RULE;
+
+    FUNCTION RULE(
+        p_name  IN VARCHAR2,
+        p_value IN CLOB,
+        p_rules IN VARCHAR2
+    ) RETURN T_RULE;
+
+    PROCEDURE VALIDATE(p_list IN T_RULES);
+    PROCEDURE VALIDATE_ALL(p_list IN T_RULES);
+    FUNCTION GET_ERRORS(p_list IN T_RULES) RETURN T_ERRORS;
+
+END PKG_VALIDATOR;
+
+/
+
+  GRANT EXECUTE ON "GENERALIDADES"."PKG_VALIDATOR" TO "SECRETARIAGRALDTIC";
+  GRANT EXECUTE ON "GENERALIDADES"."PKG_VALIDATOR" TO "SIGESUSTIC";
+  GRANT EXECUTE ON "GENERALIDADES"."PKG_VALIDATOR" TO "SIEVAUTIC";
+  GRANT EXECUTE ON "GENERALIDADES"."PKG_VALIDATOR" TO "DACIDTIC";
+  GRANT EXECUTE ON "GENERALIDADES"."PKG_VALIDATOR" TO "CALIDAD";
