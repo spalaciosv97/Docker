@@ -1,0 +1,50 @@
+# =====================================================================
+# compose.build.yaml — SOLO para construir la imagen distribuible
+#
+# NO es el compose que usa el equipo. Ese vive en el repo consumidor.
+#
+# La diferencia clave con cualquier otro compose de este proyecto:
+#
+#   *** NO hay volumen montado en /opt/oracle/oradata ***
+#
+# Es deliberado. Si hubiera un volumen, los datafiles de la base se
+# escribirian en el volumen y NO en la capa de la imagen, y el
+# "docker commit" saldria con la base vacia. El fallo es silencioso:
+# la imagen se genera igual, pesa parecido, y recien se descubre cuando
+# alguien la levanta y no encuentra GENERALIDADES.
+#
+# Uso: ./build.sh <version>
+# =====================================================================
+
+services:
+  oracle:
+    image: local/oracle19c-se2:19.3.0
+    container_name: oracle19-build
+    ports:
+      # 1523 para no chocar ni con el proyecto original (1521) ni con
+      # el lab (1522).
+      - "127.0.0.1:1523:1521"
+    environment:
+      ORACLE_SID: DEMOCDB
+      ORACLE_PDB: DEMOPDB
+      ORACLE_PWD: Oracle_Poc_2026
+      ORACLE_CHARACTERSET: AL32UTF8
+      ORACLE_NCHAR_CHARACTERSET: AL16UTF16
+    volumes:
+      # Los scripts, de solo lectura. Los bind mounts NO se commitean,
+      # asi que la imagen final no los va a contener: queda solo Oracle
+      # con la base instalada.
+      - ./setup:/poc/setup:ro
+      - ./install.sh:/poc/install.sh:ro
+      - ./logs:/poc/logs
+      # Aqui esta la magia: Oracle ejecuta lo que encuentre en este
+      # directorio la primera vez que crea la base.
+      - ./autorun:/opt/oracle/scripts/setup:ro
+    healthcheck:
+      test: ["CMD", "/opt/oracle/checkDBStatus.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 60
+      # 40m: crear la base tarda ~25 min y ahora se suma la instalacion.
+      start_period: 40m
+    shm_size: 1gb

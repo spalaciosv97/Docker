@@ -1,0 +1,9 @@
+# La imagen empaquetada pesa 5-6 GB. GitHub rechaza archivos sobre
+# 100 MB, y de todas formas no tiene sentido versionar un artefacto que
+# se puede regenerar con ./build.sh
+dist/
+
+# Los logs son el resultado de cada corrida, no fuente
+logs/*.log
+logs/INSTALL_OK
+logs/INSTALL_FALLO

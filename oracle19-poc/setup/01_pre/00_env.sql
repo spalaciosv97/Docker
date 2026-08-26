@@ -10,12 +10,13 @@ WHENEVER SQLERROR CONTINUE
 -- Nombre del PDB donde vive todo. Cambiar aqui si el compose usa otro.
 DEFINE PDB_NAME = DEMOPDB
 
--- Password de los esquemas de la PoC. NO es un secreto: esta base es
--- local, descartable y sin datos reales. Para un entorno compartido,
--- parametrizar via .env y pasarlo con -v al invocar sqlplus.
--- Sin comillas: SQL*Plus las trata como parte del valor en algunos
--- casos y quedaria IDENTIFIED BY ""Grl_Poc_2026"". Las comillas van en
--- el punto de uso.
+-- Las contrasenas NO viven aca: install.sh las inyecta como DEFINE
+-- desde el .env antes de llamar a este script. Estos valores son solo
+-- el respaldo para poder correr los scripts sueltos al depurar.
+--
+-- Sin comillas a proposito: SQL*Plus las tratara como parte del valor y
+-- quedaria IDENTIFIED BY ""Grl_Poc_2026"". Las comillas van en el punto
+-- de uso.
 DEFINE GRL_PWD      = Grl_Poc_2026
 DEFINE AUDITOR_PWD  = Aud_Poc_2026
 DEFINE SIGE_PWD     = Sig_Poc_2026
