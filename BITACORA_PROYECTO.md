@@ -218,15 +218,27 @@ cualquiera que conecte un backend:
 `oracle19-poc/` — proyecto completo, versionable:
 
 ```
+build.sh              construye, verifica, congela y empaqueta la imagen
+compose.build.yaml    SIN volumen en oradata — condición para el commit
 compose.lab.yaml      entorno descartable (puerto 1522, volumen propio)
-install.sh            orquestador de los 5 pasos
+autorun/              dispara install.sh solo, al crearse la base
+install.sh            orquestador de los 8 pasos
+CHANGELOG.md          qué trae cada versión de la imagen
 setup/
   01_pre/             tablespaces, stubs, AUDITOR, SIGESUSTIC, usuario
   10_generalidades/   MASTER_GRL_DOCKER.sql + 80 archivos referenciados
   20_post/            sinónimos públicos (requiere SYS)
   30_data/            datos maestros, aislados para poder reemplazarlos
+  35_fixtures/        las 1000 personas sintéticas (semilla fija)
+  40_recompile/       recompila los bodies que dependen de los sinónimos
+  50_app_demo/        esquema de ejemplo que consume las librerías
   99_validation/      validación + prueba funcional con APP_DEMO
 ```
+
+Y `Documents\oracle19-generalidades\` — la carpeta que se comparte: solo
+`compose.yaml`, `.env`, los scripts de export/import, `README.md`,
+`LEEME_PRIMERO.txt` y `SHA256.txt`. **Sin historial de errores**, por
+pedido explícito: eso vive acá.
 
 ### Decisiones de diseño
 
@@ -292,23 +304,150 @@ sus 349 comunas y escribe en `AUDITOR.LOG_SYSTEM`. Los acentos quedaron
 correctos (`PARÁMETROS`, `GÉNEROS`), y no hay ningún DB Link: el entorno
 es autónomo, que era la condición dura del jefe.
 
+---
+
+## FASE 3 — Imagen pre-horneada ✅
+
+### El cambio de enfoque
+
+El plan original era que cada persona corriera `docker compose up` y los
+scripts armaran la base en su máquina. El jefe lo descartó: **20-25
+minutos de espera por persona, y cada uno arriesgando su propio fallo.**
+La instrucción fue «pásale la imagen completa, llegar y ejecutar».
+
+Los scripts **no se botaron**: siguen siendo la fuente de verdad. Se
+corren **una sola vez, acá**, y el resultado se congela en una imagen.
+Cuando haya que agregar otro esquema, se modifica el script y se
+reconstruye — no se parcha la imagen a mano.
+
+```
+scripts (fuente de verdad) ──build.sh──► imagen .tar.gz ──► compañeros
+        se corre 1 vez acá                   llegar y ejecutar
+```
+
+### Cómo se congela la base
+
+`docker commit` sobre el contenedor con la base ya instalada. Dos
+condiciones que no son obvias y que rompen el resultado en silencio:
+
+**1. No puede haber volumen montado en `/opt/oracle/oradata` al
+construir.** Si lo hay, los datafiles viven en el volumen y `commit` los
+ignora — la imagen sale con los binarios pero sin base, y el compañero
+espera 25 minutos mientras se reinstala desde cero. Por eso
+`compose.build.yaml` no declara ese volumen, mientras el `compose.yaml`
+del repo compartido sí.
+
+**2. `Config.Volumes` tiene que quedar en `null`.** La imagen base de
+Oracle declara `VOLUME /opt/oracle/oradata`. Si ese metadato sobrevive al
+commit, Docker crea un volumen anónimo al arrancar y vuelve a tapar los
+datafiles horneados. `build.sh` lo limpia explícitamente.
+
+El síntoma de ambos es el mismo y es fácil de malinterpretar: **arranca
+lento**. Por eso el criterio de aceptación es el tiempo de arranque —
+25 segundos significa que la base venía horneada; 25 minutos, que salió
+vacía.
+
+### El build valida antes de congelar
+
+`build.sh` aborta si `logs/INSTALL_OK` no existe, y **deja el contenedor
+en pie a propósito** para poder revisar los logs. Congelar una base con
+objetos inválidos sería repartir el error a todo el mundo.
+
+```
+1/6 Preparando            4/6 Apagando Oracle limpiamente (SHUTDOWN IMMEDIATE)
+2/6 Creando la base       5/6 Congelando (docker commit)
+3/6 Verificando ← aborta  6/6 Empaquetando (docker save | gzip)
+```
+
+El `SHUTDOWN IMMEDIATE` del paso 4 no es cosmético: congelar una base
+abierta dejaría los datafiles inconsistentes.
+
+### Las 1000 personas son sintéticas a propósito
+
+El jefe pidió poblar `GRL_PERSONA`, y **explícitamente que no se
+extrajeran de Desarrollo**: la imagen va a circular por lugares que no
+controlamos y en Desarrollo las personas son reales.
+
+`setup/35_fixtures/personas.sql` las genera con `DBMS_RANDOM.SEED(42)`,
+así que dos builds dan el mismo resultado. Se reconocen a simple vista:
+`ID_PERSONA` 900001-901000, correos `@example.invalid` (TLD reservado por
+RFC 2606, no resuelve), teléfonos `+56 9 0000 ....`, identificadores en
+un rango alto no asignado. El dígito verificador **sí** es válido, para
+que sirvan al probar validaciones.
+
+### Tres tropiezos escribiendo el fixture
+
+Los tres son la misma frontera: **PL/SQL y SQL no comparten
+vocabulario.** Dentro de un `INSERT`, Oracle está en SQL, y ahí no
+existen ni el `BOOLEAN`, ni el `.COUNT` de una colección, ni una función
+declarada local al bloque (`PLS-00231`). La solución fue precalcular
+todo en variables antes del `INSERT`.
+
+### Resultado de la v1.0.0
+
+```
+Arranque                   25 segundos  (era 20-25 min)
+Objetos inválidos          0
+Personas en GRL_PERSONA    1000
+contar_comunas             349
+Artefacto                  3,28 GB comprimido / 14,5 GB en disco
+```
+
+### La entrega por archivo tiene un modo de fallo propio
+
+Al primer compañero le falló el `docker load` con
+`unpigz: corrupted -- incomplete deflate data`. El origen estaba sano
+(`gzip -t` OK antes de empaquetar): **se cortó la transferencia.** Con
+3,3 GB por red institucional es común, y no avisa — el archivo solo
+queda más chico, y el error aparece recién después de varios minutos de
+descompresión.
+
+Se agregó `SHA256.txt` con el tamaño exacto (`3516608206`) y el hash, y
+la verificación pasó a ser el **paso 2** del `LEEME_PRIMERO.txt`, antes
+de cargar la imagen. Un minuto de comprobación evita quince de espera
+inútil. Para copiar desde carpeta de red se recomienda `robocopy /Z`,
+que retoma si se corta.
+
+Esto es el argumento fuerte a favor de un registry (`ghcr.io`): un
+`docker pull` verifica los digests solo y retoma descargas. Quedó
+diferido para no bloquear la primera demo.
+
+---
+
 ## Estado
 
 ```
 FASE 1 — Infraestructura        ✅ completa
 FASE 2 — GENERALIDADES          ✅ completa
-FASE 3 — Empaquetado automático ⬜ pendiente
+FASE 3 — Imagen pre-horneada    ✅ completa (v1.0.0 entregada)
 FASE 4 — RU 19.31               ⬜ pendiente
 ```
 
 ### Pendiente
 
-- **Preguntar a QA por `FECHA_CREACION`** (ver punto 7 arriba).
-- Pedir a QA el conteo `DBA_OBJECTS` de su ambiente depurado, para
-  comparar contra el nuestro.
-- Reemplazar `30_data/` por el set limpio de QA cuando llegue.
-- Confirmar si `GENERALIDADES` tiene sinónimos privados en QA (los 8 del
+**Deuda técnica propia — lo más urgente**
+
+- **`tools/preparar_entrega_qa.ps1` no existe.** Las tres
+  transformaciones que se le hicieron a los archivos de QA (los 545
+  `;` agregados, los 19 archivos convertidos de CP1252 a UTF-8, los 13
+  packages de test eliminados) se corrieron a mano y **no quedaron
+  versionadas**. Mientras siga así, una entrega nueva de QA no se puede
+  procesar sin repetir el trabajo a ciegas.
+
+**Preguntas abiertas a QA**
+
+- **`FECHA_CREACION`** (ver punto 7 arriba). Parchado local a
+  `FECHA_REG`, 4 ocurrencias, marcadas con comentario.
+- `GRL_PERSONA.ID_PERSONA` no tiene trigger que lo asigne. Confirmar si
+  es así en QA o si falta el objeto.
+- El conteo `DBA_OBJECTS` de su ambiente depurado, para comparar.
+- Si `GENERALIDADES` tiene sinónimos privados en QA (los 8 del
   inventario eran de DEV).
-- Empaquetar para arranque automático (ver
-  [`oracle19-poc/COMO_REPLICAR.md`](oracle19-poc/COMO_REPLICAR.md)).
-- Subir la imagen al RU 19.31.
+- Reemplazar `30_data/` por el set limpio de QA cuando llegue.
+
+**Diferido por decisión**
+
+- `ghcr.io` como registry privado, para dejar de copiar 3,3 GB a mano.
+- Subir la imagen al RU 19.31 (sería la v2.0.0).
+- Confirmar con el equipo el rango de identificadores sintéticos.
+- Evaluar una instancia en el servidor, si el uso lo justifica.
