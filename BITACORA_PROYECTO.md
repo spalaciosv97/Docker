@@ -397,10 +397,19 @@ Artefacto                  3,28 GB comprimido / 14,5 GB en disco
 
 Al primer compañero le falló el `docker load` con
 `unpigz: corrupted -- incomplete deflate data`. El origen estaba sano
-(`gzip -t` OK antes de empaquetar): **se cortó la transferencia.** Con
-3,3 GB por red institucional es común, y no avisa — el archivo solo
-queda más chico, y el error aparece recién después de varios minutos de
-descompresión.
+(`gzip -t` OK antes de empaquetar), así que el archivo estaba
+incompleto. La causa concreta, confirmada con él: **corrió el
+`docker load` cuando la descarga todavía no había terminado.**
+
+Es más fácil de cometer de lo que parece. El archivo aparece en la
+carpeta desde el primer byte, con su nombre definitivo, y `docker load`
+lo acepta sin chistar: no tiene forma de saber que le van a llegar más
+datos. Recién falla varios minutos después, y el mensaje habla de
+corrupción — que suena a archivo dañado en origen, no a descarga a
+medio camino. Ahí se pierde el tiempo, buscando en el lugar equivocado.
+
+El mismo síntoma lo produce una transferencia cortada, que con 3,3 GB
+por red institucional también es común y tampoco avisa.
 
 Se agregó `SHA256.txt` con el tamaño exacto (`3516608206`) y el hash, y
 la verificación pasó a ser el **paso 2** del `LEEME_PRIMERO.txt`, antes
