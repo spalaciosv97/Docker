@@ -30,6 +30,26 @@ services:
       ORACLE_PWD: Oracle_Poc_2026
       ORACLE_CHARACTERSET: AL32UTF8
       ORACLE_NCHAR_CHARACTERSET: AL16UTF16
+      # Memoria de Oracle FIJA, y queda horneada en la imagen. Son los
+      # valores que dbca calculo solo para la 1.0.0 y la 1.1.0 en el
+      # notebook. Sin fijarlos, createDB.sh reparte la RAM que ve (o
+      # TODO el limite del contenedor, si lo hay) y la imagen saldria
+      # distinta segun donde se construya.
+      INIT_SGA_SIZE: 2055
+      INIT_PGA_SIZE: 685
+    # Limite opcional, para construir en un servidor compartido:
+    #   MEM_LIMIT=4g ./build.sh 1.0.0
+    # Sin MEM_LIMIT, 0 = sin limite (como en el notebook). Por defecto
+    # sin swap extra: si se pasa, muere el build y no lo de otros.
+    mem_limit: ${MEM_LIMIT:-0}
+    memswap_limit: ${MEMSWAP_LIMIT:-0}
+    # El mismo tope que da Docker Desktop. Un Docker en Linux puede dar
+    # ~1.000 millones, y el Java de dbca aborta al reservar la tabla de
+    # descriptores: "unable to allocate file descriptor table".
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     volumes:
       # Los scripts, de solo lectura. Los bind mounts NO se commitean,
       # asi que la imagen final no los va a contener: queda solo Oracle

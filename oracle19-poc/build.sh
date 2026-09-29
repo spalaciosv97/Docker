@@ -24,7 +24,11 @@
 # el contenedor ya verificado y apagado.
 #   ./build.sh 1.1.0 --ords --reanudar
 #
-# Se corre desde WSL/Git Bash en la carpeta oracle19-poc/.
+# En un servidor compartido (docker-prod), limitar la memoria del
+# contenedor. Sin swap extra salvo que se pida con MEMSWAP_LIMIT:
+#   MEM_LIMIT=4g ./build.sh 1.0.0
+#
+# Se corre desde WSL/Git Bash en la carpeta oracle19-poc/, o en Linux.
 # =====================================================================
 
 set -euo pipefail
@@ -65,6 +69,10 @@ PROJ="$CONT"
 DIST="dist"
 # Las lee compose.build.ords.yaml.
 export CONT LOGDIR WITH_APEX DB_PORT="${DB_PORT:-}" ORDS_PORT="${ORDS_PORT:-}"
+# Las leen los dos compose de build. Con MEM_LIMIT y sin MEMSWAP_LIMIT,
+# memswap = memoria: el contenedor no usa swap.
+export MEM_LIMIT="${MEM_LIMIT:-0}"
+export MEMSWAP_LIMIT="${MEMSWAP_LIMIT:-$MEM_LIMIT}"
 
 banner() {
   echo
@@ -115,6 +123,11 @@ if [ "$REANUDAR" = "si" ]; then
 else
 
 banner "1/6 — Preparando ($IMAGE)"
+if [ "$MEM_LIMIT" = "0" ]; then
+  echo "Memoria del contenedor: sin limite"
+else
+  echo "Memoria del contenedor: $MEM_LIMIT (con swap: $MEMSWAP_LIMIT)"
+fi
 if [ "$ORDS" = "si" ]; then
   if ! docker image inspect local/oracle19c-se2-ords:19.3.0 >/dev/null 2>&1; then
     echo "ERROR: falta la imagen local/oracle19c-se2-ords:19.3.0"
@@ -130,6 +143,10 @@ fi
 # la base ya existiria y Oracle NO volveria a ejecutar el setup.
 limpiar
 mkdir -p "$LOGDIR" "$DIST"
+# En Linux el contenedor escribe como 'oracle' (uid 54321), no como quien
+# corre build.sh. Sin esto install.sh cae a /tmp: el paso 3 no ve
+# INSTALL_OK y los logs quedarian horneados en la imagen.
+chmod a+rwx "$LOGDIR"
 rm -f "$LOGDIR"/*.log "$LOGDIR"/INSTALL_OK "$LOGDIR"/INSTALL_FALLO \
       "$LOGDIR"/ORDS_INSTALL_OK "$LOGDIR"/ORDS_INSTALL_FALLO \
       "$LOGDIR"/ORDS_OK "$LOGDIR"/ORDS_FALLO "$LOGDIR"/respuesta_*.txt
@@ -147,6 +164,9 @@ while ! docker logs "$CONT" 2>&1 | grep -q "DATABASE IS READY TO USE"; do
   if ! docker ps --format '{{.Names}}' | grep -q "^${CONT}$"; then
     echo "ERROR: el contenedor se detuvo. Ultimas lineas:"
     docker logs --tail 40 "$CONT" 2>&1
+    if [ "$(docker inspect -f '{{.State.OOMKilled}}' "$CONT" 2>/dev/null)" = "true" ]; then
+      echo "Lo mato el limite de memoria (MEM_LIMIT=$MEM_LIMIT)."
+    fi
     exit 1
   fi
   sleep 30

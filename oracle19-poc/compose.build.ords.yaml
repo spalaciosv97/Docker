@@ -32,6 +32,16 @@ services:
       ORACLE_NCHAR_CHARACTERSET: AL16UTF16
       # La UNICA diferencia entre las dos variantes.
       WITH_APEX: ${WITH_APEX:-false}
+      # Memoria de Oracle fija y limite opcional: ver compose.build.yaml.
+      INIT_SGA_SIZE: 2055
+      INIT_PGA_SIZE: 685
+    mem_limit: ${MEM_LIMIT:-0}
+    memswap_limit: ${MEMSWAP_LIMIT:-0}
+    # Ver compose.build.yaml (dbca aborta con un nofile gigante).
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
     volumes:
       - ./setup:/poc/setup:ro
       - ./install.sh:/poc/install.sh:ro
