@@ -69,6 +69,14 @@ rama `grl-json`), y se está consiguiendo acceso al servidor
    login, respetando las reglas de la FASE 6.
 3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
    verificada).
+4. **Liberar el notebook, pero solo cuando el servidor ya construya
+   bien.** Dos trampas:
+   - Los `.tar.gz` de `PARA_SERVIDOR` (1.0.0 y 1.1.0) son lo que se
+     reparte: no borrarlos hasta que estén copiados en otro lado.
+   - Borrar imágenes en Docker Desktop **no achica** el disco virtual
+     (`docker_data.vhdx`, ~51 GB en C:): el espacio queda libre por
+     dentro, no para Windows. Para recuperarlo hay que compactar el
+     disco virtual aparte.
 
 ---
 
