@@ -908,6 +908,13 @@ Conclusiones:
 - El contenedor siguió `healthy`, 0 reinicios (caídas < 3 min, antes de
   que `autoheal` actúe).
 
+Para repetirla **a mano** (Postman/Hoppscotch por túnel) con la base
+abajo el tiempo que se quiera, el lab se recreó (29-sep) **sin
+healthcheck** (`servidor/lab/compose.sin-healthcheck.yaml`): así
+`autoheal` no lo toca. Se baja y sube con `bajar_bd.sh [abort]` y
+`subir_bd.sh` en `~/oracle19-lab-ords/`. Para volver al lab normal:
+`up -d` sin ese archivo.
+
 ### Carpeta `servidor/` (29-sep)
 
 Se decidió **no** separar el repo ni hacer una rama para el servidor:
