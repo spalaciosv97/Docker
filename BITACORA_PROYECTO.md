@@ -64,8 +64,9 @@ rama `grl-json`), y se está consiguiendo acceso al servidor
 1. Resultado de la prueba de `PKG_JSON` en QA
    (`GRL_JSON_desarrollo\04b_comparar_personas.sql`): ¿el formato
    coincide con `apex_json`? Ver la FASE 5 → "GRL_JSON".
-2. Acceso al servidor `docker-prod` (FASE 6): el puerto SSH no responde
-   desde el Wi-Fi de la universidad.
+2. Acceso al servidor `docker-prod` (FASE 6): SSH en el **puerto 2200**,
+   que responde. Falta crear o registrar la llave SSH y hacer el primer
+   login, respetando las reglas de la FASE 6.
 3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
    verificada).
 
@@ -666,12 +667,21 @@ docker-prod.unap.cl   172.19.82.189
 usuarios: "desarrollo" y "spalaciosv"
 ```
 
-**Estado al 29-sep:** desde el notebook, en el Wi-Fi de la universidad
-(`10.20.125.166`), el servidor **responde al ping pero el puerto 22
-(SSH) no**. El nombre resuelve bien. O sea, la máquina se alcanza pero
-SSH está filtrado: firewall, otro puerto, o acceso solo desde otra red o
-por un equipo intermedio. **No se probaron otros puertos a propósito:**
-preguntarle al administrador.
+**Estado al 29-sep:** el SSH está en el **puerto 2200**, no en el 22
+(lo confirmó el administrador). Desde el notebook, en el Wi-Fi de la
+universidad (`10.20.125.166`), el 2200 **responde**; el 22 no. Todavía
+no se hizo ningún login.
+
+```
+ssh -p 2200 spalaciosv@docker-prod.unap.cl
+```
+
+En el notebook ya existe una llave SSH (`~/.ssh/id_rsa`). **Siguiente
+paso:** decidir si se reutiliza o se crea una dedicada para este
+servidor (recomendado: `ed25519` nueva), registrarla en el servidor y
+hacer el primer login. Después, antes de cualquier otra cosa, mirar solo
+lectura: `hostname`, `id`, `docker version`, `df -h`, `free -h` y
+`docker ps`, para saber qué hay y qué permisos se tienen.
 
 **Cómo se trabajaría:** Claude Code sigue en el notebook y ejecuta
 comandos en el servidor por SSH (`ssh usuario@docker-prod.unap.cl
@@ -718,7 +728,7 @@ FASE 3 — Imagen pre-horneada    ✅ completa (v1.0.0 entregada)
 FASE 4 — RU 19.31               ⬜ pendiente
 FASE 5 — Imagen con ORDS        ✅ completa (1.1.0-ords, sin APEX)
          GRL_JSON (sin APEX)    🔄 en prueba en QA (rama grl-json)
-FASE 6 — Servidor docker-prod   🔄 en curso (SSH no responde)
+FASE 6 — Servidor docker-prod   🔄 en curso (SSH en puerto 2200, falta la llave)
 ```
 
 ### Pendiente
