@@ -28,7 +28,9 @@ SERVIDOR="${SERVIDOR:-docker-prod}"
 SSH="${SSH:-$(command -v ssh.exe || command -v ssh)}"
 BASE="local/oracle19c-se2:19.3.0"
 BASE_ORDS="local/oracle19c-se2-ords:19.3.0"
-remoto() { "$SSH" -o BatchMode=yes -o ServerAliveInterval=30 "$SERVIDOR" "$@"; }
+# LogLevel=ERROR: el ssh de Git Bash avisa en cada conexion que el
+# servidor no ofrece intercambio de llaves post-cuantico. No es nuestro.
+remoto() { "$SSH" -o BatchMode=yes -o ServerAliveInterval=30 -o LogLevel=ERROR "$SERVIDOR" "$@"; }
 
 echo "== 1/3 Codigo"
 # Se sube el COMMIT, no el arbol de trabajo: asi cada build del servidor
@@ -39,9 +41,10 @@ if [ -n "$(git status --porcelain -- .)" ] && [ "${FORZAR:-}" != "1" ]; then
   exit 1
 fi
 COMMIT=$(git rev-parse --short HEAD)
-PREFIJO=$(git rev-parse --show-prefix)     # "oracle19-poc/"
-git archive --format=tar --prefix=oracle19-poc/ "HEAD:${PREFIJO%/}" \
-  | remoto "tar -xf - -C ~ && echo $COMMIT > ~/oracle19-poc/COMMIT.txt"
+# Desde oracle19-poc/, git archive ya se limita a esta carpeta. (La forma
+# HEAD:oracle19-poc da un arbol VACIO sin error: por eso el chequeo.)
+git archive --format=tar --prefix=oracle19-poc/ HEAD \
+  | remoto "tar -xf - -C ~ && test -f ~/oracle19-poc/servidor/build_servidor.sh && echo $COMMIT > ~/oracle19-poc/COMMIT.txt"
 echo "   ~/oracle19-poc actualizado al commit $COMMIT"
 
 echo "== 2/3 Imagen base ($BASE)"
