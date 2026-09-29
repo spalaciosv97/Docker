@@ -1,10 +1,73 @@
 # Bitácora — PoC Oracle 19c + GENERALIDADES en Docker
 
 > Resumen de todo lo hecho, en orden, con las decisiones y por qué se
-> tomaron. Complementa a [`CONTEXTO_ORACLE_DOCKER_POC.md`](CONTEXTO_ORACLE_DOCKER_POC.md),
-> que tiene el detalle técnico del ambiente.
+> tomaron. Es el **punto de entrada** del proyecto: un chat nuevo debe
+> empezar por la sección siguiente. [`CONTEXTO_ORACLE_DOCKER_POC.md`](CONTEXTO_ORACLE_DOCKER_POC.md)
+> es histórico (estado al 11 de agosto).
 >
-> Última actualización: 12 de agosto de 2026.
+> Última actualización: 29 de septiembre de 2026.
+
+---
+
+## Cómo retomar en un chat nuevo
+
+**Estado en una línea:** hay dos imágenes pre-horneadas listas para
+repartir (la 1.0.0 sin ORDS y la 1.1.0 con ORDS sin APEX). Se está
+probando en QA un reemplazo nativo de `apex_json` (`PKG_JSON`, en la
+rama `grl-json`), y se está consiguiendo acceso al servidor
+`docker-prod.unap.cl` (FASE 6).
+
+**Dónde está cada cosa**
+
+| Qué | Dónde |
+|---|---|
+| Scripts de construcción (fuente de verdad) | `Documents\Docker\oracle19-poc\` — repo git, rama `master` |
+| Imagen 1.0.0 para repartir | `Documents\PARA_SERVIDOR\oracle19-generalidades-1.0.0\` |
+| Imagen 1.1.0 ORDS para repartir | `Documents\PARA_SERVIDOR\oracle19-generalidades-ords-1.1.0\` |
+| `PKG_JSON` / GRL_JSON (en prueba) | rama git `grl-json` + `Documents\GRL_JSON_desarrollo\` (paquete para Desarrollo/QA) |
+| Repo compartido de la 1.0.0 | `Documents\oracle19-generalidades\` (repo git aparte) |
+| Endpoints ORDS reales de Gedo (referencia) | `Documents\gedo-motor-mapeo\db-snapshot\GEDOTIC\ORDS\Modulos.sql` |
+
+**Git (repo `Documents\Docker`)**
+
+- `master`: exactamente lo que produjo las imágenes 1.0.0 y 1.1.0.
+  Construir desde acá da lo mismo que se repartió.
+- `grl-json`: `master` + `PKG_JSON` en la imagen y los endpoints
+  `/comunas` y `/personas`. **No se reparte** hasta que se decida
+  adoptarlo. Si se adopta, sería la 1.2.0.
+- Hay un remoto `origin`. Nada se sube sin pedirlo explícitamente.
+
+**Comandos**
+
+```bash
+# desde WSL, en oracle19-poc/
+./build.sh 1.0.0                    # imagen base
+./build.sh 1.1.0 --ords             # + ORDS sin APEX
+./build.sh 1.1.0 --ords --reanudar  # retoma desde el commit si fallo el paso 5/6
+# la variante --ords-apex esta resuelta pero NO se construye (decision del jefe)
+```
+
+**Restricciones que ya costaron tiempo**
+
+- **Disco C: del notebook casi lleno** (~7 GB libres). Un build se cae
+  si se llena a mitad (`Bus error`, Docker responde 500). Construir de a
+  una variante; en lo posible, construir en el servidor (FASE 6).
+- **WSL tiene 6 GB de RAM:** nunca dos builds de Oracle a la vez.
+- **Desde PowerShell, no pasar SQL por `docker exec ... bash -c "..."`**:
+  las comillas se rompen. Dejar el SQL en un archivo y ejecutarlo con
+  `sqlplus @archivo`.
+- **Los `.sh` tienen que tener finales LF**: un CRLF falla dentro del
+  contenedor sin un error claro.
+
+**Próximos pasos**
+
+1. Resultado de la prueba de `PKG_JSON` en QA
+   (`GRL_JSON_desarrollo\04b_comparar_personas.sql`): ¿el formato
+   coincide con `apex_json`? Ver la FASE 5 → "GRL_JSON".
+2. Acceso al servidor `docker-prod` (FASE 6): el puerto SSH no responde
+   desde el Wi-Fi de la universidad.
+3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
+   verificada).
 
 ---
 
@@ -337,10 +400,15 @@ espera 25 minutos mientras se reinstala desde cero. Por eso
 `compose.build.yaml` no declara ese volumen, mientras el `compose.yaml`
 del repo compartido sí.
 
-**2. `Config.Volumes` tiene que quedar en `null`.** La imagen base de
-Oracle declara `VOLUME /opt/oracle/oradata`. Si ese metadato sobrevive al
-commit, Docker crea un volumen anónimo al arrancar y vuelve a tapar los
-datafiles horneados. `build.sh` lo limpia explícitamente.
+**2. `Config.Volumes` tiene que quedar en `null`.** Si la imagen
+declarara `VOLUME /opt/oracle/oradata`, Docker crearía un volumen anónimo
+al arrancar y volvería a tapar los datafiles horneados. Queda en `null`,
+pero **no porque `build.sh` lo limpie** (esta bitácora lo decía y era
+falso: el `docker commit` no lleva ningún `--change`). Queda en `null`
+porque la imagen base, construida con esta versión de `docker-images`,
+nunca declaró el `VOLUME`; solo lo menciona en una etiqueta. Verificado
+con `docker image inspect` en la FASE 5. Si algún día se reconstruye la
+base desde otra versión de `docker-images`, hay que volver a mirarlo.
 
 El síntoma de ambos es el mismo y es fácil de malinterpretar: **arranca
 lento**. Por eso el criterio de aceptación es el tiempo de arranque —
@@ -423,6 +491,224 @@ diferido para no bloquear la primera demo.
 
 ---
 
+## FASE 5 — Imagen con ORDS ✅
+
+### El pedido, y el malentendido que había detrás
+
+El jefe pidió una segunda imagen pre-horneada, **en paralelo** a la
+1.0.0, con ORDS funcionando. Los endpoints institucionales (Gedo) arman
+su JSON con `apex_json`, así que se le planteó que haría falta APEX al
+menos en modo runtime. Su respuesta fue que no: que al instalar ORDS
+"ya viene APEX". **No es así.** ORDS y APEX son productos distintos, y
+`APEX_JSON` es un package de APEX.
+
+Se decidió demostrarlo en vez de discutirlo: construir la imagen sin
+APEX y dejar dentro un endpoint que falle por eso. Se preparó además la
+variante con APEX, por si la respuesta cambiaba.
+
+Resultado: con la demostración a la vista, el jefe aceptó que
+`apex_json` no funciona sin APEX. **Se reparte solo la variante sin
+APEX.** La con APEX queda resuelta en los scripts pero no se construye.
+
+### Cómo quedó armado
+
+Los mismos scripts de `setup/` sirven a las dos imágenes, que conviven.
+No se forkeó el proyecto:
+
+```
+./build.sh 1.0.0            oracle19c-grl:1.0.0        (sin cambios)
+./build.sh 1.1.0 --ords     oracle19c-grl-ords:1.1.0   + ORDS
+```
+
+- `ords/Dockerfile`: capa delgada sobre la imagen base, con Java 21
+  (Temurin) y ORDS 26.2.3, descargados una vez con `ords/descargar.sh`.
+  No usa `yum`: OL7 está fuera de soporte.
+- `install_ords.sh` corre **después** de `install.sh`: `ords install`
+  (crea `ORDS_METADATA` y `ORDS_PUBLIC_USER`), la configuración y el REST
+  de `APP_DEMO`. Todo antes del banner, dentro del mismo gate que ya
+  usaba `build.sh`.
+- `ords/startup/50_ords.sh` va **horneado** en `/opt/oracle/scripts/startup/`,
+  que la imagen oficial recorre en cada arranque. Lanza ORDS en segundo
+  plano: si lo bloqueara, el contenedor no quedaría nunca `healthy`.
+- El healthcheck mira solo la base, a propósito. Un problema de ORDS no
+  debe bloquear el acceso por SQL.
+
+### La demostración
+
+Dos endpoints en `APP_DEMO` que son **el mismo bloque PL/SQL**, mismo
+`owa_util`, misma respuesta. Solo cambia la librería de JSON:
+
+```
+GET /ords/app_demo/v1/prueba        JSON_OBJECT_T (nativo)  → 200 {"data":{"comunas":349,"personas":1000},"status":"OK"}
+GET /ords/app_demo/v1/prueba-apex   apex_json               → 403 PLS-00201: identifier 'APEX_JSON.OPEN_OBJECT' must be declared
+```
+
+La primera versión de `/prueba` era una consulta SQL que ORDS
+serializaba solo. Se cambió a un bloque PL/SQL a pedido, para que la
+comparación no dejara lugar a "la diferencia es el tipo de handler". El
+error aparece en la respuesta HTTP misma, porque la imagen trae
+`debug.printDebugToScreen` activado (entorno de desarrollo).
+
+`build.sh` **exige** ese fallo: si `/prueba-apex` respondiera 200 en la
+imagen sin APEX, el build aborta. La imagen no puede salir contradiciendo
+lo que demuestra.
+
+### Lo que se encontró de APEX en el código real
+
+En el snapshot de módulos ORDS de GEDOTIC: 62 handlers, y todo el uso de
+APEX es `apex_json` (`open/close_object`, `open/close_array`, `write`).
+60 de los 62 hacen `apex_json.write(nombre, cursor)`, que serializa un
+`SYS_REFCURSOR` en una línea. No se usa ninguna otra parte de APEX. La
+recomendación que se llevó al jefe: mantener APEX donde ya está mientras
+existan esos handlers, y que los endpoints nuevos se escriban sin
+`apex_json`.
+
+### Tropiezos
+
+**ORDS 26 cambió dos banderas de `ords install`.** Rechaza
+`--db-pool default` (el pool `default` es implícito) y solo lee la
+password de `ORDS_PUBLIC_USER` por stdin si además va `--proxy-user`.
+Sin esa bandera falla con "The ORDS_PUBLIC_USER password must be
+provided for non-interactive install".
+
+**Una validación que aceptaba un error como respuesta.** La versión de
+ORDS se leía con `ords.installed_version`, que como SYS da `ORA-06598`.
+El veredicto guardó **el texto del error** como si fuera la versión, y
+dio la instalación por buena. Se endureció la función que consulta la
+base (cualquier `ORA-` devuelve vacío) y la versión se lee de la vista
+`ORDS_METADATA.ORDS_VERSION`. Es la misma lección de la FASE 2: el
+criterio tiene que poder fallar.
+
+**Un pool de ORDS roto no se recupera solo.** Iterando sobre el mismo
+contenedor, ORDS arrancó con la configuración a medias y marcó el pool
+como inválido (`571 DatabaseConnectionError`, "Reconnection was not
+attempted"). Solo se arregla reiniciando ORDS. En un build limpio no
+pasa, porque la instalación termina antes de que ORDS arranque.
+
+**El alias REST y Database Actions.** Con el alias `demo`, Database
+Actions respondía "Credenciales no válidas" con la password correcta:
+busca un alias igual al usuario. Se cambió a `app_demo`.
+
+**Disco C: lleno.** El primer `docker commit` murió con `Bus error`: C:
+había llegado a 0 bytes libres (el disco virtual de Docker vive ahí).
+Tras eso el motor respondía `500` a todo y WSL no podía arrancar Ubuntu
+(`Wsl/Service/CreateInstance/E_FAIL`). Se liberaron ~23 GB dentro de
+Docker (contenedores viejos `oracle19-lab`, `oracle19-poc` y
+`oracle19-grl` con sus volúmenes, y la caché de build). Se agregó
+`build.sh --reanudar`, que retoma desde el commit sobre un contenedor ya
+verificado sin rehacer la base.
+
+### Resultado de la 1.1.0-ords
+
+Probado como un compañero, en un contenedor nuevo, desde la carpeta de
+distribución:
+
+```
+Primer arranque     base ~2-4 min (copia al volumen), ORDS ~30 s después
+Reinicio            base ~30-50 s, ORDS ~20-30 s después
+/prueba             200   {"data":{"comunas":349,"personas":1000},"status":"OK"}
+/prueba-apex        403   PLS-00201 ... APEX_JSON.OPEN_OBJECT
+Database Actions    alias app_demo + credenciales de APP_DEMO: 200 (y 401 con
+                    password mala), probado por REST-Enabled SQL. Falta
+                    confirmar la pantalla de login en el navegador.
+Artefacto           3 771 433 861 bytes / 15,1 GB en disco
+SHA256              5105B5F6CE039C12E211F2FB53082E9DE9551C1AE352BEDCB8B8E126C4F97F24
+```
+
+Carpeta lista para repartir:
+`Documents\PARA_SERVIDOR\oracle19-generalidades-ords-1.1.0\`. En git,
+es el estado de la rama `master`.
+
+### GRL_JSON: reemplazo nativo de `apex_json` (en prueba, rama `grl-json`)
+
+Después de la demostración surgió la pregunta de fondo: ¿se puede
+prescindir de APEX? Del código de Gedo, lo único que no tiene
+equivalente nativo directo es `apex_json.write(nombre, cursor)`, que
+convierte un `SYS_REFCURSOR` entero a JSON. Lo demás es `JSON_OBJECT_T`.
+
+Se escribió `PKG_JSON` (sinónimo público `GRL_JSON`), con dos piezas:
+
+- `cursor_a_json(cursor)`: describe el cursor con `DBMS_SQL` y arma un
+  `JSON_ARRAY_T`, con los nombres de columna como claves.
+- `imprimir(json)`: lo manda por `htp` en trozos, porque `htp.p` admite
+  como máximo 32767 caracteres por llamada.
+
+Probado en la imagen: 349 comunas, 1000 personas (201 KB en una
+respuesta), error del handler como 500 limpio, nulos, fechas, `CLOB`,
+escapes, acentos y un error claro con tipos no soportados.
+
+**Sin confirmar:** que el formato sea idéntico al de `apex_json`
+(fechas, nulos, mayúsculas en las claves). Solo se puede confirmar donde
+hay APEX. **En QA ya está instalado en GENERALIDADES** y se corrieron
+los pasos 01-03; falta `04b_comparar_personas.sql` con las ~20 000
+personas reales.
+
+`PKG_PERSONA.GET_ALL` de QA **no sirve** para esa comparación: devuelve
+un `CLOB` ya armado con `JSON_ARRAYAGG`, no un cursor, y corta en 10 000
+filas. De paso muestra que GENERALIDADES ya arma JSON sin APEX en código
+en uso.
+
+**Por qué va en una rama aparte:** no está decidido si se va a usar, y
+la imagen 1.1.0 que se reparte no lo trae. En `grl-json` la imagen lo
+instala (`setup/60_ords/05_pkg_json.sql` y `06_...`) y `build.sh`
+valida `/comunas` y `/personas`. Si se adopta, pasa a GENERALIDADES por
+el compañero de QA y sería la imagen 1.2.0.
+
+---
+
+## FASE 6 — Servidor `docker-prod` (en curso)
+
+El disco del notebook no da para seguir construyendo imágenes, y el
+jefe dio acceso a un servidor Docker de la universidad:
+
+```
+docker-prod.unap.cl   172.19.82.189
+usuarios: "desarrollo" y "spalaciosv"
+```
+
+**Estado al 29-sep:** desde el notebook, en el Wi-Fi de la universidad
+(`10.20.125.166`), el servidor **responde al ping pero el puerto 22
+(SSH) no**. El nombre resuelve bien. O sea, la máquina se alcanza pero
+SSH está filtrado: firewall, otro puerto, o acceso solo desde otra red o
+por un equipo intermedio. **No se probaron otros puertos a propósito:**
+preguntarle al administrador.
+
+**Cómo se trabajaría:** Claude Code sigue en el notebook y ejecuta
+comandos en el servidor por SSH (`ssh usuario@docker-prod.unap.cl
+"..."`). Para eso hace falta una **llave SSH**: se genera en el
+notebook y la persona la registra en el servidor una sola vez, tecleando
+ella la contraseña en su terminal. **La contraseña nunca se escribe en
+el chat.**
+
+**Sobre los dos usuarios:** `spalaciosv` parece personal y `desarrollo`
+compartido. Usar el personal, para que quede claro quién hizo qué, salvo
+que el administrador diga otra cosa. Confirmar cuál tiene permiso para
+usar Docker.
+
+### Reglas para trabajar en `docker-prod`
+
+Es un servidor de **producción** compartido. Lo acordado:
+
+1. **Solo tocar lo nuestro.** Todo lo que se cree lleva el prefijo
+   `oracle19`: contenedores, volúmenes, imágenes, redes y proyectos de
+   compose. Nunca parar, borrar ni modificar nada que no lo tenga.
+2. **Nada de limpieza general:** ni `docker system prune`, ni
+   `docker image prune`, ni `docker volume prune`, ni
+   `docker builder prune`. Borran cosas de otros. Para borrar algo
+   nuestro, se borra por nombre.
+3. **Antes de cualquier cosa pesada**, mirar recursos (`df -h`,
+   `free -h`, `docker ps`) y avisar. Un build de Oracle ocupa ~6 GB de
+   RAM y ~30 GB de disco durante una hora.
+4. **Puertos:** no publicar nada sin acordarlo. Nada en `0.0.0.0`: los
+   endpoints de ORDS son anónimos.
+5. **Nada fuera de nuestra carpeta** (p. ej. `~/oracle19-poc`): ni
+   paquetes del sistema, ni configuración de Docker, ni servicios.
+6. **Preguntas pendientes al jefe:** para qué es el servidor (¿máquina de
+   construcción, base compartida para los compañeros, o solo para dejar
+   el `.tar.gz`?), cuánto disco y RAM se pueden usar, y qué puertos.
+
+---
+
 ## Estado
 
 ```
@@ -430,6 +716,9 @@ FASE 1 — Infraestructura        ✅ completa
 FASE 2 — GENERALIDADES          ✅ completa
 FASE 3 — Imagen pre-horneada    ✅ completa (v1.0.0 entregada)
 FASE 4 — RU 19.31               ⬜ pendiente
+FASE 5 — Imagen con ORDS        ✅ completa (1.1.0-ords, sin APEX)
+         GRL_JSON (sin APEX)    🔄 en prueba en QA (rama grl-json)
+FASE 6 — Servidor docker-prod   🔄 en curso (SSH no responde)
 ```
 
 ### Pendiente
@@ -454,9 +743,22 @@ FASE 4 — RU 19.31               ⬜ pendiente
   inventario eran de DEV).
 - Reemplazar `30_data/` por el set limpio de QA cuando llegue.
 
+**Preguntas abiertas al DBA**
+
+- Qué versiones de ORDS y APEX corren en DEV, QA y PROD. La imagen usa
+  ORDS 26.2.3 (fijada en `ords/VERSIONES.txt`); un endpoint
+  que anda acá podría no andar en un ORDS institucional más viejo.
+
 **Diferido por decisión**
+
+- Variante con APEX runtime (`./build.sh 1.1.0 --ords-apex`): resuelta
+  en los scripts, no construida. Requiere volver a correr
+  `ords/descargar.sh`: el zip de APEX se borró para liberar disco.
+- Verificar que `./build.sh` **sin** bandera siga produciendo lo mismo
+  que la 1.0.0. El código de ese camino no cambió, pero no se corrió un
+  build de regresión.
 
 - `ghcr.io` como registry privado, para dejar de copiar 3,3 GB a mano.
 - Subir la imagen al RU 19.31 (sería la v2.0.0).
 - Confirmar con el equipo el rango de identificadores sintéticos.
-- Evaluar una instancia en el servidor, si el uso lo justifica.
+- ~~Evaluar una instancia en el servidor~~ → ahora es la FASE 6.

@@ -1,0 +1,19 @@
+Descargado: 2026-09-28T09:06:26-03:00
+
+--- Java
+openjdk version "21.0.12.1" 2026-08-18 LTS
+OpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS, mixed mode, sharing)
+
+--- ORDS
+  /mnt/c/Users/sebapalacios/Documents/Docker/oracle19-poc/ords/downloads
+
+Oracle REST Data Services 26.2.3.r2371104
+
+--- APEX (la version exacta queda en dba_registry al instalarlo)
+apex/apxrtins.sql
+
+--- SHA256
+2413149700df0f7d440500a84a8f764c535f21e5a5e87d38328b64eec2c5b500  jre21.tar.gz
+59f73c01ea52a63a9929e3b1d5452fff30bbc1ec70deac8fc508940847d0cc55  ords.zip
+06df14e7c8465747ee45c36c5a0b09821bf2b244db0e201d3cc44abb0403f023  apex.zip

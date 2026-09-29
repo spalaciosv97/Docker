@@ -7,3 +7,10 @@ dist/
 logs/*.log
 logs/INSTALL_OK
 logs/INSTALL_FALLO
+logs/ords/
+logs/ords-apex/
+
+# Java, ORDS y APEX (~600 MB). Se vuelven a bajar con ords/descargar.sh;
+# la version exacta usada queda en ords/VERSIONES.txt.
+ords/downloads/*
+!ords/downloads/.gitkeep

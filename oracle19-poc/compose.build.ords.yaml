@@ -1,0 +1,52 @@
+# =====================================================================
+# compose.build.ords.yaml — SOLO para construir las variantes con ORDS
+#
+# Sirve para las dos (con y sin APEX). build.sh fija las variables:
+#
+#   ./build.sh 1.1.0 --ords         CONT=oracle19-build-ords       WITH_APEX=false
+#   ./build.sh 1.1.0 --ords-apex    CONT=oracle19-build-ords-apex  WITH_APEX=true
+#
+# Igual que compose.build.yaml:
+#
+#   *** NO hay volumen montado en /opt/oracle/oradata ***
+#
+# Ver ese archivo para el porque. Aca importa todavia mas: ORDS_METADATA
+# y APEX viven en esos datafiles.
+#
+# Cada variante tiene sus propios puertos y su propia carpeta de logs,
+# asi se pueden construir las dos a la vez.
+# =====================================================================
+
+services:
+  oracle:
+    image: local/oracle19c-se2-ords:19.3.0
+    container_name: ${CONT:-oracle19-build-ords}
+    ports:
+      - "127.0.0.1:${DB_PORT:-1524}:1521"
+      - "127.0.0.1:${ORDS_PORT:-8082}:8080"
+    environment:
+      ORACLE_SID: DEMOCDB
+      ORACLE_PDB: DEMOPDB
+      ORACLE_PWD: Oracle_Poc_2026
+      ORACLE_CHARACTERSET: AL32UTF8
+      ORACLE_NCHAR_CHARACTERSET: AL16UTF16
+      # La UNICA diferencia entre las dos variantes.
+      WITH_APEX: ${WITH_APEX:-false}
+    volumes:
+      - ./setup:/poc/setup:ro
+      - ./install.sh:/poc/install.sh:ro
+      - ./install_ords.sh:/poc/install_ords.sh:ro
+      - ./${LOGDIR:-logs/ords}:/poc/logs
+      # APEX descomprimido. En la variante sin APEX se monta igual pero
+      # nadie lo lee. No queda en la imagen: es un bind mount.
+      - ./ords/downloads/apex:/poc/apex:ro
+      - ./autorun-ords:/opt/oracle/scripts/setup:ro
+    healthcheck:
+      # Solo la base. Ver install_ords.sh / README: ORDS se valida
+      # aparte, en el paso 3 de build.sh.
+      test: ["CMD", "/opt/oracle/checkDBStatus.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 60
+      start_period: 90m
+    shm_size: 1gb

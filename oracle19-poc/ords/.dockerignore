@@ -1,0 +1,9 @@
+# La imagen solo necesita Java, ORDS y los scripts. APEX NO va en la
+# imagen: se instala en la base durante el build (bind mount), y los
+# archivos comprimidos ya estan descomprimidos al lado. Sin esto, docker
+# build copiaria ~1,5 GB al daemon para no usarlos.
+downloads/apex
+downloads/META-INF
+downloads/*.zip
+downloads/*.tar.gz
+downloads/*.part

@@ -223,6 +223,44 @@ GRANT SELECT  ON GENERALIDADES.GRL_REFERENCIA_ITEM TO MI_APP;
 
 ---
 
+## Actualización: las tres imágenes pre-horneadas
+
+> Lo de arriba describe el camino hasta la FASE 2. Después el jefe
+> eligió la **opción B** (imagen pre-horneada, ver la bitácora), y hoy se
+> construyen tres imágenes desde los mismos scripts de `setup/`:
+
+```bash
+./build.sh 1.0.0                 # oracle19c-grl            — solo la base
+./build.sh 1.1.0 --ords          # oracle19c-grl-ords       — + ORDS, sin APEX
+./build.sh 1.1.0 --ords-apex     # oracle19c-grl-ords-apex  — + ORDS + APEX runtime
+```
+
+Las dos con ORDS necesitan antes, una sola vez (~10 min, desde WSL):
+
+```bash
+bash ords/descargar.sh       # Java 21, ORDS y APEX a ords/downloads/ (no versionado)
+bash ords/construir_base.sh  # local/oracle19c-se2-ords:19.3.0 + prueba de humo
+```
+
+| | base | `--ords` | `--ords-apex` |
+|---|---|---|---|
+| Tiempo de build | ~30 min | ~35 min | ~55 min |
+| Instalación | `install.sh` | `install.sh` + `install_ords.sh` | ídem, con `WITH_APEX=true` |
+| Puertos del build | 1523 | 1524 / 8082 | 1525 / 8083 |
+| Logs | `logs/` | `logs/ords/` | `logs/ords-apex/` |
+| Gate antes de congelar | `INSTALL_OK` | + `ORDS_INSTALL_OK` + prueba HTTP | ídem |
+
+La única diferencia entre las dos con ORDS es si APEX queda instalado
+en la base. Por eso el endpoint `/ords/app_demo/v1/prueba-apex` es idéntico
+en ambas, y `build.sh` exige un resultado distinto en cada una: **200**
+con APEX, y **fallo con `PLS-00201 ... APEX_JSON`** sin APEX. Si la
+variante sin APEX respondiera 200, el build aborta.
+
+WSL tiene 6 GB de RAM en esta máquina: construir las variantes **de a
+una**, no en paralelo.
+
+---
+
 ## Cosas que se van a preguntar
 
 **¿Y si QA cambia GENERALIDADES?** Se reemplazan los `.sql` de

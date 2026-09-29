@@ -1,5 +1,11 @@
 # CONTEXTO — PoC Oracle 19c + GENERALIDADES en Docker
 
+> **⚠ Documento histórico (estado al 11 de agosto de 2026).** Describe
+> el ambiente y la entrega de QA ANTES de las imágenes pre-horneadas.
+> Para el estado actual, las rutas y los próximos pasos, leer primero
+> [`BITACORA_PROYECTO.md`](BITACORA_PROYECTO.md), sección
+> **"Cómo retomar en un chat nuevo"**.
+
 > **Objetivo de este archivo:** entregar todo el contexto acumulado del trabajo para continuar desde otra sesión de ChatGPT, idealmente desde la aplicación de escritorio con acceso a la carpeta completa de scripts de QA.
 >
 > **Fecha de estado:** 11 de agosto de 2026.
