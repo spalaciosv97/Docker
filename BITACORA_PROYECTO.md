@@ -695,6 +695,27 @@ compartido. Usar el personal, para que quede claro quién hizo qué, salvo
 que el administrador diga otra cosa. Confirmar cuál tiene permiso para
 usar Docker.
 
+### Para qué se va a usar (29-sep, según el usuario; falta confirmar con el jefe)
+
+Tres usos, **separados por nombre** para que no se pisen:
+
+| Uso | Qué corre | Nombres |
+|---|---|---|
+| **Construir** imágenes y `.tar.gz` | contenedores temporales del build | `oracle19-build-*`, imágenes `oracle19c-grl*:<versión>` |
+| **Pruebas propias** | un lab que se puede romper y rehacer | `oracle19-lab-*`, puertos propios |
+| **Base compartida** | una instancia fija a la que se conectan los compañeros por red | p. ej. `oracle19-compartida`, volumen propio |
+
+La base compartida **cambia la naturaleza del proyecto**: deja de ser
+local y descartable. Antes de levantarla hay que decidir contraseñas
+propias (las del `.env` son públicas), quién puede conectarse y desde
+qué red, si se desactiva `debug.printDebugToScreen`, y **respaldos**,
+porque los esquemas de los compañeros vivirían ahí.
+
+Docker no tiene permisos por usuario: cualquiera con acceso a Docker en
+el servidor puede parar o borrar cualquier contenedor, imagen o
+volumen. Lo que evita pisarse son los nombres y el acuerdo, no una
+restricción técnica.
+
 ### Reglas para trabajar en `docker-prod`
 
 Es un servidor de **producción** compartido. Lo acordado:
