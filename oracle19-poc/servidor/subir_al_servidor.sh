@@ -43,8 +43,15 @@ fi
 COMMIT=$(git rev-parse --short HEAD)
 # Desde oracle19-poc/, git archive ya se limita a esta carpeta. (La forma
 # HEAD:oracle19-poc da un arbol VACIO sin error: por eso el chequeo.)
-git archive --format=tar --prefix=oracle19-poc/ HEAD \
-  | remoto "tar -xf - -C ~ && test -f ~/oracle19-poc/servidor/build_servidor.sh && echo $COMMIT > ~/oracle19-poc/COMMIT.txt"
+# core.autocrlf=false: con autocrlf=true (Windows), git archive desde una
+# subcarpeta entrega los .sh con CRLF pese a eol=lf, y en Linux fallan.
+git -c core.autocrlf=false archive --format=tar --prefix=oracle19-poc/ HEAD \
+  | remoto "tar -xf - -C ~ && test -f ~/oracle19-poc/servidor/build_servidor.sh"
+CRLF=$(remoto "cd ~/oracle19-poc && grep -rlI \$'\r' --include='*.sh' . || true")
+if [ -n "$CRLF" ]; then
+  echo "ERROR: estos .sh llegaron con CRLF al servidor:"; echo "$CRLF"; exit 1
+fi
+remoto "echo $COMMIT > ~/oracle19-poc/COMMIT.txt"
 echo "   ~/oracle19-poc actualizado al commit $COMMIT"
 
 echo "== 2/3 Imagen base ($BASE)"
