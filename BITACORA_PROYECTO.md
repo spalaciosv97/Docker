@@ -75,8 +75,17 @@ rama `grl-json`). Desde el 29-sep se construye en el servidor
    (servidor). Ojo: `autoheal` reinicia cualquier contenedor *unhealthy*.
 3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
    verificada).
-4. **Liberar el notebook, pero solo cuando el servidor ya construya
-   bien.** Dos trampas:
+4. ✅ **Notebook liberado (29-sep).** Se borraron de Docker Desktop las 4
+   imágenes Oracle, el build cache (10 GB) y el volumen/contenedor de la
+   prueba del 28-sep; `fstrim` dentro de la VM. C: pasó de 0 a 7 GB
+   libres; falta **compactar el `.vhdx`** (51 GB, `diskpart compact vdisk`
+   como administrador, con Docker cerrado y `wsl --shutdown`).
+   **El notebook ya no tiene imágenes Oracle:** para construir o probar
+   acá, traerlas del servidor, p. ej.
+   `ssh docker-prod "docker save local/oracle19c-se2:19.3.0 | gzip -1" | gunzip | docker load`.
+   `servidor/subir_al_servidor.sh` sigue sirviendo mientras el servidor
+   ya tenga la base y Java/ORDS (los pasos 2 y 3 se saltan). Las trampas
+   que había anotadas:
    - Los `.tar.gz` de `PARA_SERVIDOR` (1.0.0 y 1.1.0) son lo que se
      reparte: no borrarlos hasta que estén copiados en otro lado.
    - Borrar imágenes en Docker Desktop **no achica** el disco virtual

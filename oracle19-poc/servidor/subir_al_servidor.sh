@@ -57,18 +57,26 @@ echo "   ~/oracle19-poc actualizado al commit $COMMIT"
 echo "== 2/3 Imagen base ($BASE)"
 if remoto "docker image inspect $BASE >/dev/null 2>&1"; then
   echo "   ya esta en el servidor"
+  # El notebook puede ya no tenerla (se libero el disco): no hay con que
+  # comparar, y la del servidor es la que se verifico al subirla.
+  if ! docker image inspect "$BASE" >/dev/null 2>&1; then
+    echo "   (no esta en el notebook: no se comparan capas)"
+    SIN_LOCAL=1
+  fi
 else
   echo "   mandando ~9,5 GB (unos 10 min; no hay barra de progreso)..."
   docker save "$BASE" | gzip -1 | remoto "pigz -dc | docker load"
 fi
 # Mismo contenido que la del notebook: se comparan las capas, no el ID
 # (Docker Desktop y el Docker del servidor calculan el ID distinto).
-if [ "$(docker image inspect -f '{{.RootFS.Layers}}' "$BASE")" != \
-     "$(remoto "docker image inspect -f '{{.RootFS.Layers}}' $BASE")" ]; then
-  echo "ERROR: $BASE del servidor no tiene las mismas capas que la del notebook."
-  exit 1
+if [ -z "${SIN_LOCAL:-}" ]; then
+  if [ "$(docker image inspect -f '{{.RootFS.Layers}}' "$BASE")" != \
+       "$(remoto "docker image inspect -f '{{.RootFS.Layers}}' $BASE")" ]; then
+    echo "ERROR: $BASE del servidor no tiene las mismas capas que la del notebook."
+    exit 1
+  fi
+  echo "   capas identicas a las del notebook"
 fi
-echo "   capas identicas a las del notebook"
 
 echo "== 3/3 Java + ORDS para construir $BASE_ORDS"
 if remoto "test -x ~/oracle19-poc/ords/downloads/jre/bin/java -a -e ~/oracle19-poc/ords/downloads/ords/bin/ords"; then
