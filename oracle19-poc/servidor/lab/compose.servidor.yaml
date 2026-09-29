@@ -1,0 +1,30 @@
+# =====================================================================
+# compose.servidor.yaml — Ajustes para correr el lab en docker-prod
+#
+#   docker compose -f compose.yaml -f compose.servidor.yaml up -d
+#
+# compose.yaml es EL MISMO que reciben los companeros, sin tocar. Esto
+# solo agrega lo que exige un servidor de produccion compartido:
+#
+#   - nombre con prefijo oracle19 (regla del servidor)
+#   - tope de 4 GB, sin swap extra: si se pasa, muere el lab y no lo
+#     de otros
+#   - nofile como en Docker Desktop (el Docker del servidor da ~1.000
+#     millones y Java puede abortar al arrancar)
+#   - ORDS en el 8082 del servidor, siempre en 127.0.0.1
+#
+# Desde el notebook se entra por tunel SSH (DataGrip, navegador).
+# =====================================================================
+
+services:
+  oracle:
+    container_name: oracle19-lab-ords
+    mem_limit: 4g
+    memswap_limit: 4g
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    ports: !override
+      - "127.0.0.1:1521:1521"
+      - "127.0.0.1:8082:8080"

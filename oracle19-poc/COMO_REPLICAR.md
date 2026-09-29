@@ -235,6 +235,52 @@ GRANT SELECT  ON GENERALIDADES.GRL_REFERENCIA_ITEM TO MI_APP;
 ./build.sh 1.1.0 --ords-apex     # oracle19c-grl-ords-apex  — + ORDS + APEX runtime
 ```
 
+La memoria de Oracle está **fijada** en los compose de build
+(`INIT_SGA_SIZE=2055`, `INIT_PGA_SIZE=685`, lo mismo que tienen la 1.0.0
+y la 1.1.0), así la imagen sale igual donde sea que se construya. En un
+servidor compartido se limita además el contenedor (sin swap extra, salvo
+`MEMSWAP_LIMIT`):
+
+```bash
+MEM_LIMIT=4g ./build.sh 1.0.0
+```
+
+### Construir en el servidor `docker-prod`
+
+Mismos scripts, dos puntos de entrada en [`servidor/`](servidor/). No hay
+una copia aparte del build: `build_servidor.sh` llama al mismo
+`build.sh`, así la imagen sale igual en el notebook y en el servidor.
+
+```bash
+# 1. En el notebook (Git Bash o WSL), con todo commiteado:
+bash servidor/subir_al_servidor.sh
+#    código del último commit + imagen base + Java/ORDS exactos (solo si faltan)
+
+# 2. En el servidor:
+ssh docker-prod
+cd ~/oracle19-poc && bash servidor/build_servidor.sh 1.1.0 --ords
+#    = MEM_LIMIT=4g + nohup; no arranca si el lab está corriendo
+```
+
+El `.tar.gz` queda en `~/oracle19-poc/dist/` del servidor. Para traerlo:
+`scp docker-prod:oracle19-poc/dist/<archivo>.tar.gz .`
+
+**Lab en el servidor** (`servidor/lab/`): el `compose.yaml` que reciben
+los compañeros, **sin tocar**, más `compose.servidor.yaml` encima
+(nombre `oracle19-lab-ords`, 4 GB, `nofile`, puertos en `127.0.0.1`):
+
+```bash
+# en ~/oracle19-lab-ords/ del servidor: compose.yaml (de la carpeta
+# distribuible) + servidor/lab/compose.servidor.yaml
+docker compose -p oracle19-lab-ords -f compose.yaml -f compose.servidor.yaml up -d
+```
+
+Desde el notebook, por túnel: `ssh -N -L 1522:127.0.0.1:1521 -L 8080:127.0.0.1:8082 docker-prod`
+y luego `localhost:1522` (DataGrip) y `http://localhost:8080/ords/...`.
+
+Ojo en ese servidor: `autoheal` reinicia **cualquier** contenedor
+*unhealthy* (`AUTOHEAL_CONTAINER_LABEL=all`), también los nuestros.
+
 Las dos con ORDS necesitan antes, una sola vez (~10 min, desde WSL):
 
 ```bash

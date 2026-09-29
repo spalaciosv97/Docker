@@ -14,8 +14,8 @@
 **Estado en una línea:** hay dos imágenes pre-horneadas listas para
 repartir (la 1.0.0 sin ORDS y la 1.1.0 con ORDS sin APEX). Se está
 probando en QA un reemplazo nativo de `apex_json` (`PKG_JSON`, en la
-rama `grl-json`), y se está consiguiendo acceso al servidor
-`docker-prod.unap.cl` (FASE 6).
+rama `grl-json`). Desde el 29-sep se construye en el servidor
+`docker-prod.unap.cl` (FASE 6), donde además hay un lab con la 1.1.0.
 
 **Dónde está cada cosa**
 
@@ -64,9 +64,15 @@ rama `grl-json`), y se está consiguiendo acceso al servidor
 1. Resultado de la prueba de `PKG_JSON` en QA
    (`GRL_JSON_desarrollo\04b_comparar_personas.sql`): ¿el formato
    coincide con `apex_json`? Ver la FASE 5 → "GRL_JSON".
-2. Acceso al servidor `docker-prod` (FASE 6): SSH en el **puerto 2200**,
-   que responde. Falta crear o registrar la llave SSH y hacer el primer
-   login, respetando las reglas de la FASE 6.
+2. Servidor `docker-prod` (FASE 6): el SSH con llave ya funciona
+   (`ssh docker-prod`) y ya **construye**: la 1.1.0 ORDS salió bien el
+   29-sep con `MEM_LIMIT=4g` (ver FASE 6 → "Primer build"). Corre
+   producción real (portal de pago, traefik, mongodb…): siempre con
+   `MEM_LIMIT=4g`. Su `.tar.gz` carga y arranca: hay un lab
+   `oracle19-lab-ords` corriendo ahí (DataGrip por túnel SSH). **Parar el
+   lab antes de construir** (no caben los dos en RAM). Flujo:
+   `servidor/subir_al_servidor.sh` (notebook) → `servidor/build_servidor.sh`
+   (servidor). Ojo: `autoheal` reinicia cualquier contenedor *unhealthy*.
 3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
    verificada).
 4. **Liberar el notebook, pero solo cuando el servidor ya construya
@@ -684,12 +690,238 @@ no se hizo ningún login.
 ssh -p 2200 spalaciosv@docker-prod.unap.cl
 ```
 
-En el notebook ya existe una llave SSH (`~/.ssh/id_rsa`). **Siguiente
-paso:** decidir si se reutiliza o se crea una dedicada para este
-servidor (recomendado: `ed25519` nueva), registrarla en el servidor y
-hacer el primer login. Después, antes de cualquier otra cosa, mirar solo
-lectura: `hostname`, `id`, `docker version`, `df -h`, `free -h` y
-`docker ps`, para saber qué hay y qué permisos se tienen.
+### Acceso SSH (resuelto el 29-sep)
+
+Se creó una llave **dedicada** para este servidor, sin reutilizar
+`~/.ssh/id_rsa` (que sirve para otras cosas): así se puede revocar sola.
+
+| Qué | Valor |
+|---|---|
+| Llave | `~/.ssh/id_ed25519_dockerprod` (ed25519, **sin passphrase**, para que Claude la use sin pedirla; es dedicada y revocable) |
+| Huella de la llave | `SHA256:qq3E4u6244UXnDn4OkgubPntusZcmuzxExLVLBbgKrA` |
+| Alias | `~/.ssh/config` → `Host docker-prod` (puerto 2200, usuario `spalaciosv`, `IdentitiesOnly yes`) |
+| Huella del servidor (ED25519) | `SHA256:ebNVeuIBYIay1EzpkDp396o47BChrd82JT8fqhXM0fE` |
+
+La registró la persona en su terminal (contraseña tecleada por ella):
+`Get-Content ~/.ssh/id_ed25519_dockerprod.pub | ssh docker-prod "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"`.
+Desde ahí: `ssh docker-prod "..."`, sin contraseña.
+
+### Reconocimiento (29-sep, solo lectura)
+
+| | |
+|---|---|
+| Sistema | Rocky Linux 9.6, 4 CPU |
+| RAM | 7,3 GiB total, **~5,2 GiB disponible** (2,2 usados por otros); swap 7,7 GiB |
+| Disco `/` (ahí vive `/var/lib/docker`) | 70 GB, **50 GB libres** |
+| Disco `/home` | 121 GB, 120 GB libres |
+| Docker | Engine 28.3.2 (cliente) |
+| `id` | `spalaciosv`, grupos `spalaciosv`, `desarrollo`, `devopsdocker` |
+
+**Bloqueo: `spalaciosv` no puede usar Docker.** `docker version` y
+`docker ps` dan *permission denied* en `/var/run/docker.sock`
+(`root:docker`, modo 660). En `/etc/group`:
+
+```
+docker:x:980:desarrollo,devopsdocker
+devopsdocker:x:1001:spalaciosv
+```
+
+Parece que se quiso dar acceso metiendo el **grupo** `devopsdocker`
+dentro de `docker`, pero Linux no anida grupos: esa lista es de
+*usuarios*. Resultado: el usuario `desarrollo` sí tiene Docker;
+`spalaciosv` no. **No se intentó ningún atajo** (ni `sudo`, ni entrar
+como `desarrollo`). Hay que pedirle al administrador:
+`usermod -aG docker spalaciosv` (y volver a entrar por SSH).
+Recordar que el grupo `docker` equivale a root en la máquina.
+
+**Resuelto el mismo 29-sep:** el administrador agregó `spalaciosv` al
+grupo `docker`. Ya se puede usar Docker con el usuario personal.
+
+### Qué corre en el servidor (29-sep, solo lectura)
+
+Es **producción real**: 12 contenedores arriba desde hace 5 semanas,
+ninguno nuestro.
+
+| Grupo | Contenedores | Puertos publicados |
+|---|---|---|
+| Portal de pago | `portal-pago-api`, `portal-pago-svc`, `portal-pago-caja-svc` | (detrás de traefik) |
+| Microservicios | `login-svc`, `redis-svc`, `mongo-svc` | (detrás de traefik) |
+| Proxy | `traefik` | `0.0.0.0:80`, `0.0.0.0:8081` |
+| Datos | `mongodb`, `redis`, `influxdb` | `27017`, `6379`, `8086` |
+| Monitoreo | `grafana`, `autoheal` | `3000` |
+| Detenidos (ajenos) | `wonderful_edison` (ingest-api), `blissful_tharp` (hello-world) | `8000` |
+
+`docker system df`: 23 imágenes (9,7 GB), 5 volúmenes (0,7 GB), sin
+build cache. Docker vive en `/var/lib/docker` (overlay2), dentro de `/`
+con **50 GB libres**.
+
+**Puertos ya ocupados** en el host: 80, 3000, 6379, 8000, 8081, 8086,
+27017. Los nuestros (1521, 8082), siempre en `127.0.0.1`, no chocan.
+
+**El riesgo real es la RAM, no el disco.** Hay 7,3 GiB en total y
+~5,1 GiB disponibles. Un build de Oracle usa ~6 GB: sin límite, el
+kernel empezaría a usar swap y, en el peor caso, el *OOM killer* podría
+matar un contenedor del **portal de pago** o `mongodb`. Antes del primer
+build:
+
+1. Preguntar al jefe cuánta RAM se puede usar y en qué horario.
+2. Correr el contenedor de build **con límite de memoria**
+   (`--memory`), aunque vaya más lento, y ajustar SGA/PGA para que quepa.
+3. Mirar `free -h` justo antes y vigilar durante el build.
+
+(El jefe confirmó que hay swap, pero igual se decidió limitar a 4 GB.)
+
+### Primer build en el servidor (29-sep, 1.1.0 con ORDS)
+
+**Cómo se llevó todo al servidor, sin volver a descargar nada:**
+
+- Código: `git archive` del árbol de trabajo → `~/oracle19-poc` (en
+  `/home`, 120 GB libres). Ahí queda también el `.tar.gz` (`dist/`).
+- Imagen `local/oracle19c-se2:19.3.0`: `docker save | gzip -1 | ssh
+  docker-prod "pigz -dc | docker load"`, en streaming: no ocupa disco del
+  notebook. 10,5 min. Los ID difieren (Docker Desktop usa el almacén de
+  containerd), pero las 9 capas (`RootFS.Layers`) son idénticas.
+- Imagen ORDS: en vez de mandar otros 10 GB, se sacaron del
+  contenedor del notebook los binarios exactos (`/opt/java/jre21` y
+  `/opt/oracle/ords/product`, ~350 MB) a `ords/downloads/{jre,ords}` y se
+  corrió `ords/construir_base.sh` en el servidor. **No** se usó
+  `descargar.sh`: sus URL son *latest* y habría cambiado las versiones.
+
+**Las imágenes y el contenedor de build quedan en `/`** (`/var/lib/docker`,
+43 GB libres), no en `/home`: es donde el daemon guarda todo, y moverlo
+exigiría reconfigurar y reiniciar Docker en producción. Un build suma
+~10 GB ahí.
+
+**Cambios al build que salieron de esto** (no cambian la imagen):
+
+1. **Memoria de Oracle fijada** en los compose de build:
+   `INIT_SGA_SIZE=2055`, `INIT_PGA_SIZE=685`. Son los valores horneados
+   en la 1.0.0 y la 1.1.0 (`strings spfileDEMOCDB.ora`), que dbca había
+   calculado solo según la RAM del notebook. Sin fijarlos, con un límite
+   de 4 GB `createDB.sh` le daría a Oracle **los 4 GB completos**
+   (`totalMemory` = memoria del contenedor) y no quedaría nada para dbca.
+2. **`MEM_LIMIT=4g ./build.sh ...`**: límite opcional (`mem_limit`), sin
+   swap extra salvo `MEMSWAP_LIMIT`. En el notebook, sin límite.
+3. **`ulimits nofile=1048576`** en los compose de build. El primer
+   intento murió al minuto: `library initialization failed - unable to
+   allocate file descriptor table - out of memory`. El Docker del
+   servidor da `nofile=1073741816` (Docker Desktop: 1048576), y el Java
+   de dbca reserva una tabla de ese tamaño. No era el límite de 4 GB.
+4. **`chmod a+rwx` a la carpeta de logs** en `build.sh`: en Linux el
+   contenedor escribe como `oracle` (uid 54321). Si no puede,
+   `install.sh` cae a `/tmp`, el paso 3 no ve `INSTALL_OK` y los logs
+   quedarían horneados.
+
+Se lanza con `nohup setsid` para que sobreviva a un corte del SSH:
+
+```bash
+cd ~/oracle19-poc && MEM_LIMIT=4g nohup setsid ./build.sh 1.1.0 --ords \
+  > logs/build_ords_1.1.0.log 2>&1 < /dev/null &
+```
+
+**Resultado: ✅ build completo en ~28 min** (12:21 → 12:49).
+
+- Verificación del paso 3 igual que en el notebook: `ords=26.2.3
+  invalidos=0 rest=1 handlers=2`, `/prueba` → 200 con 349 comunas y
+  1000 personas, `/prueba-apex` → 403 con `PLS-00201 APEX_JSON`.
+- Memoria del contenedor: máximo ~3,3 de 4 GiB. El servidor nunca bajó
+  de ~2,2 GB disponibles y la swap casi no se movió (~100-140 MB).
+- `dist/oracle19c-grl-ords-1.1.0.tar.gz`: 4,1 GB, `gzip -t` OK, sha256
+  `427d94fe…4dccb3f`. Es más grande que el del notebook (3,8 GB) porque
+  `docker save` del almacén clásico exporta las capas en otro formato; no
+  es byte a byte el mismo archivo.
+- Después del build: `/` con 39 GB libres, `/home` con 116 GB. No quedan
+  contenedores `oracle19*`. Quedan en el servidor las imágenes
+  `local/oracle19c-se2:19.3.0`, `local/oracle19c-se2-ords:19.3.0` y
+  `oracle19c-grl-ords:1.1.0`.
+
+### Lab en el servidor desde el `.tar.gz` (29-sep) ✅
+
+Prueba del camino de los compañeros: se borró la imagen del build
+(`docker rmi oracle19c-grl-ords:1.1.0`) y se cargó desde el archivo.
+`docker load` 81 s, base lista en 20 s, `/prueba` →
+`{"comunas":349,"personas":1000}`, login `GENERALIDADES@//127.0.0.1:1521/DEMOPDB`
+OK.
+
+En `~/oracle19-lab-ords/`: el `compose.yaml` de `PARA_SERVIDOR` **sin
+tocar** + `compose.servidor.yaml` encima (nombre `oracle19-lab-ords`,
+4 GB sin swap, `nofile`, puertos `127.0.0.1:1521` y `127.0.0.1:8082`):
+
+```bash
+cd ~/oracle19-lab-ords
+docker compose -p oracle19-lab-ords -f compose.yaml -f compose.servidor.yaml up -d   # o stop
+```
+
+Volumen: `oracle19-lab-ords_oracle_grl_ords_data` (los datos del lab).
+
+**Queda corriendo y usa ~3 GB de RAM** (el servidor queda con ~2,3 GB
+disponibles). **Lab y build no caben a la vez:** antes de un build,
+`... stop` el lab.
+
+**Desde DataGrip (notebook):** conexión Oracle con host `localhost`,
+puerto `1521`, Service Name `DEMOPDB`, usuario `GENERALIDADES`, y en la
+pestaña SSH/SSL un túnel a `docker-prod.unap.cl:2200`, usuario
+`spalaciosv`, llave `~/.ssh/id_ed25519_dockerprod`. ORDS en el navegador:
+`ssh -N -L 8080:127.0.0.1:8082 docker-prod` y `http://localhost:8080/ords/...`.
+
+El primer intento en DataGrip dio `ORA-12541 ... localhost port 1521`:
+fue directo al notebook, sin túnel (la pestaña SSH/SSL no quedó
+activa). El túnel sí funciona (probado). Lo más simple es abrir el
+túnel a mano, `ssh -N -L 1522:127.0.0.1:1521 docker-prod`, y en
+DataGrip usar `localhost:1522` **sin** configuración SSH.
+
+### `autoheal` también vigila lo nuestro
+
+En el servidor corre `willfarrell/autoheal` con
+`AUTOHEAL_CONTAINER_LABEL=all`: **reinicia a la fuerza (10 s de gracia)
+cualquier contenedor *unhealthy***, también los `oracle19-*`. Con el
+healthcheck del lab (20 fallos × 20 s), una base caída ~7 min provoca un
+reinicio. Durante un build no molesta (`start_period` de 40-90 min).
+
+### Prueba: ¿qué hace ORDS si se cae la base? (29-sep, en el lab)
+
+Script: `servidor/lab/prueba_caida_bd.sh` (resultado en
+`~/oracle19-lab-ords/pruebas/` del servidor). Se bajó la base dentro
+del contenedor, con ORDS vivo, dos veces:
+
+| | `/prueba`, `/prueba-apex`, `/sql-developer` |
+|---|---|
+| Base arriba | 200 / 403 (`PLS-00201`, esperado) / 200 |
+| `SHUTDOWN IMMEDIATE` | **HTTP 571** `DatabaseConnectionError`, en **9-15 s** cada una |
+| `SHUTDOWN ABORT` (como corte de luz) | igual: 571 en 9-15 s |
+| Después de `STARTUP` | 200 **en ~1 s**, sin reiniciar ORDS |
+
+Conclusiones:
+
+- **ORDS no se cae** con la base: el proceso sigue vivo y responde un
+  JSON de error propio:
+  `{"code":"DatabaseConnectionError","title":"Database Connection Error","message":"Contact your system administrator and provide the request ECID..."}`.
+- **571 no es un código HTTP estándar** (es de ORDS). Está en el rango
+  5xx, así que un cliente que trate "≥ 500 = error del servidor" lo
+  maneja; uno que compare contra una lista (500, 502, 503) no.
+- **Cada request tarda 9-15 s** en fallar (ORDS intenta abrir la
+  conexión antes de rendirse). Un backend que llame a ORDS con timeout
+  corto verá *timeout*, no el 571.
+- **Se recupera solo** en ~1 s después de abrir la base, y la PDB abre
+  sola en `READ WRITE` (estado guardado). Tras el `ABORT`, la
+  recuperación de instancia no dio problemas.
+- El contenedor siguió `healthy`, 0 reinicios (caídas < 3 min, antes de
+  que `autoheal` actúe).
+
+### Carpeta `servidor/` (29-sep)
+
+Se decidió **no** separar el repo ni hacer una rama para el servidor:
+los dos builds corren los mismos scripts, y dos copias terminarían
+divergiendo. En `oracle19-poc/servidor/`:
+
+| Archivo | Dónde se corre | Qué hace |
+|---|---|---|
+| `subir_al_servidor.sh` | notebook | código del último commit, imagen base, Java/ORDS exactos (solo lo que falte) |
+| `build_servidor.sh` | servidor | `MEM_LIMIT=4g` + `nohup` + log; no arranca si el lab corre |
+| `lab/compose.servidor.yaml` | servidor | override del lab (nombre, 4 GB, `nofile`, puertos) |
+| `lab/prueba_caida_bd.sh` | servidor | la prueba de arriba |
+
+Ver `COMO_REPLICAR.md` → "Construir en el servidor docker-prod".
 
 **Cómo se trabajaría:** Claude Code sigue en el notebook y ejecuta
 comandos en el servidor por SSH (`ssh usuario@docker-prod.unap.cl
@@ -770,7 +1002,7 @@ FASE 3 — Imagen pre-horneada    ✅ completa (v1.0.0 entregada)
 FASE 4 — RU 19.31               ⬜ pendiente
 FASE 5 — Imagen con ORDS        ✅ completa (1.1.0-ords, sin APEX)
          GRL_JSON (sin APEX)    🔄 en prueba en QA (rama grl-json)
-FASE 6 — Servidor docker-prod   🔄 en curso (SSH en puerto 2200, falta la llave)
+FASE 6 — Servidor docker-prod   🔄 en curso (build + lab OK; flujo en servidor/)
 ```
 
 ### Pendiente
