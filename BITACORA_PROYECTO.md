@@ -923,6 +923,13 @@ divergiendo. En `oracle19-poc/servidor/`:
 
 Ver `COMO_REPLICAR.md` → "Construir en el servidor docker-prod".
 
+Dos trampas de `git archive` al escribir `subir_al_servidor.sh`, las dos
+silenciosas: desde la subcarpeta, `HEAD:oracle19-poc` da un árbol
+**vacío** sin error; y con `core.autocrlf=true` entrega los `.sh` con
+**CRLF** pese a `eol=lf`. Se usa `git -c core.autocrlf=false archive
+HEAD` y el script verifica que llegó `servidor/` y que ningún `.sh`
+tenga CRLF.
+
 **Cómo se trabajaría:** Claude Code sigue en el notebook y ejecuta
 comandos en el servidor por SSH (`ssh usuario@docker-prod.unap.cl
 "..."`). Para eso hace falta una **llave SSH**: se genera en el
