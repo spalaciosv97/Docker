@@ -1,0 +1,18 @@
+# =====================================================================
+# compose.sin-healthcheck.yaml — Lab SIN healthcheck, para pruebas de caida
+#
+#   docker compose -p oracle19-lab-ords -f compose.yaml \
+#     -f compose.servidor.yaml -f compose.sin-healthcheck.yaml up -d
+#
+# En docker-prod corre autoheal con AUTOHEAL_CONTAINER_LABEL=all: reinicia
+# a la fuerza cualquier contenedor "unhealthy", tambien el lab. Con la
+# base abajo, el healthcheck lo declara unhealthy en ~7 min y autoheal lo
+# reinicia. Sin healthcheck nunca queda unhealthy y autoheal no lo toca.
+#
+# Para volver a la normal, el mismo up -d SIN este archivo.
+# =====================================================================
+
+services:
+  oracle:
+    healthcheck:
+      disable: true
