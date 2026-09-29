@@ -695,21 +695,34 @@ compartido. Usar el personal, para que quede claro quién hizo qué, salvo
 que el administrador diga otra cosa. Confirmar cuál tiene permiso para
 usar Docker.
 
-### Para qué se va a usar (29-sep, según el usuario; falta confirmar con el jefe)
+### Para qué se va a usar (decidido el 29-sep)
 
-Tres usos, **separados por nombre** para que no se pisen:
+**Solo como máquina de trabajo propia: construir, generar el `.tar.gz`
+y probar.** Los compañeros siguen como hasta ahora: reciben el
+`.tar.gz` y levantan la imagen **en su equipo**. En el servidor no queda
+nada corriendo para otros.
 
-| Uso | Qué corre | Nombres |
-|---|---|---|
-| **Construir** imágenes y `.tar.gz` | contenedores temporales del build | `oracle19-build-*`, imágenes `oracle19c-grl*:<versión>` |
-| **Pruebas propias** | un lab que se puede romper y rehacer | `oracle19-lab-*`, puertos propios |
-| **Base compartida** | una instancia fija a la que se conectan los compañeros por red | p. ej. `oracle19-compartida`, volumen propio |
+```
+servidor docker-prod                          compañeros
+  ./build.sh  ──► imagen ──► .tar.gz  ──copia──►  docker load + compose up (local)
+                    │
+                    └──► lab propio para probar (oracle19-lab-*)
+```
 
-La base compartida **cambia la naturaleza del proyecto**: deja de ser
-local y descartable. Antes de levantarla hay que decidir contraseñas
-propias (las del `.env` son públicas), quién puede conectarse y desde
-qué red, si se desactiva `debug.printDebugToScreen`, y **respaldos**,
-porque los esquemas de los compañeros vivirían ahí.
+| Uso | Nombres |
+|---|---|
+| Construir imágenes y `.tar.gz` | contenedores `oracle19-build-*`, imágenes `oracle19c-grl*:<versión>` |
+| Pruebas propias | contenedores `oracle19-lab-*` |
+
+**Descartado por ahora: una base compartida** a la que se conecten
+todos por red. Cambiaría la naturaleza del proyecto (dejaría de ser
+local y descartable) y obligaría a resolver contraseñas propias, acceso
+por red, errores visibles de ORDS y respaldos.
+
+Como en el servidor los puertos quedan en `127.0.0.1`, para probar desde
+el notebook (Postman, DataGrip, el navegador) se usa un **túnel SSH**,
+por ejemplo `ssh -p 2200 -L 8080:127.0.0.1:8082 spalaciosv@docker-prod.unap.cl`,
+y luego `http://localhost:8080/...` en el notebook.
 
 Docker no tiene permisos por usuario: cualquiera con acceso a Docker en
 el servidor puede parar o borrar cualquier contenedor, imagen o
