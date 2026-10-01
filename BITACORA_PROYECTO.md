@@ -74,9 +74,13 @@ rama `grl-json`). Desde el 29-sep se construye en el servidor
    `servidor/subir_al_servidor.sh` (notebook) → `servidor/build_servidor.sh`
    (servidor). Ojo: `autoheal` reinicia cualquier contenedor *unhealthy*.
    **Antes de tocar el servidor, leer las reglas de la FASE 6.**
-   **Estado del lab al 29-sep: corriendo SIN healthcheck** (para la
-   prueba manual de caída con Postman). Al terminar, volver a la normal:
-   `cd ~/oracle19-lab-ords && docker compose -p oracle19-lab-ords -f compose.yaml -f compose.servidor.yaml up -d`.
+   Estado del lab al 1-oct: corriendo **con** healthcheck (normal), 4 GB.
+   Siguiente: instalar el SGU_BD real (`Documents\Arquitectura back\SGU_BD`)
+   en el lab, reemplazando el SIGESUSTIC mínimo sin romper GENERALIDADES;
+   solo después, a los scripts y a una imagen nueva.
+   **Pendiente de acordar:** un backend PHP en otro servidor (p. ej.
+   prat-dev) conectado al lab. Hoy el 1521 está solo en `127.0.0.1` y
+   las contraseñas son las de demo: ver FASE 6 → "Conectar otro servidor".
 3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
    verificada).
 4. ✅ **Notebook liberado (29-sep).** Se borraron de Docker Desktop las 4
@@ -1039,6 +1043,26 @@ Es un servidor de **producción** compartido. Lo acordado:
 
 Estas reglas son **del servidor**. En el notebook (Docker Desktop
 propio) sí se puede limpiar con `prune`.
+
+### Conectar otro servidor al lab (pendiente de acordar, 1-oct)
+
+Idea: un backend PHP en otro servidor (p. ej. prat-dev) que use la base
+del lab. **Hoy no se puede** sin cambiar cosas: el 1521 del lab está solo
+en `127.0.0.1` de docker-prod. Opciones, ninguna hecha:
+
+1. **Publicar el 1521 hacia la red.** Docker se salta firewalld al
+   publicar un puerto, así que quedaría abierto a toda la red, con
+   contraseñas de demo que están en la documentación. Para hacerlo bien:
+   contraseñas propias, y una regla que deje entrar solo a prat-dev
+   (`DOCKER-USER` en iptables = configuración del servidor → la pone el
+   administrador). Necesita acuerdo del jefe y del administrador.
+2. **Túnel SSH desde prat-dev** (`autossh`): no cambia docker-prod,
+   pero deja un servicio colgando de la cuenta personal y frágil.
+
+En los dos casos el lab dejaría de ser "solo mío y descartable": un
+`compose down -v` o un rebuild rompería el otro servidor. Mientras se
+prueba, PHP en el notebook por túnel (`localhost:1522`). Falta saber si
+prat-dev llega a docker-prod por red.
 
 ---
 
