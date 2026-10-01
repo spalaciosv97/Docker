@@ -73,6 +73,10 @@ rama `grl-json`). Desde el 29-sep se construye en el servidor
    lab antes de construir** (no caben los dos en RAM). Flujo:
    `servidor/subir_al_servidor.sh` (notebook) → `servidor/build_servidor.sh`
    (servidor). Ojo: `autoheal` reinicia cualquier contenedor *unhealthy*.
+   **Antes de tocar el servidor, leer las reglas de la FASE 6.**
+   **Estado del lab al 29-sep: corriendo SIN healthcheck** (para la
+   prueba manual de caída con Postman). Al terminar, volver a la normal:
+   `cd ~/oracle19-lab-ords && docker compose -p oracle19-lab-ords -f compose.yaml -f compose.servidor.yaml up -d`.
 3. Repartir la 1.1.0 (la carpeta de `PARA_SERVIDOR` está lista y
    verificada).
 4. ✅ **Notebook liberado (29-sep).** Se borraron de Docker Desktop las 4
@@ -1004,15 +1008,37 @@ Es un servidor de **producción** compartido. Lo acordado:
    `docker builder prune`. Borran cosas de otros. Para borrar algo
    nuestro, se borra por nombre.
 3. **Antes de cualquier cosa pesada**, mirar recursos (`df -h`,
-   `free -h`, `docker ps`) y avisar. Un build de Oracle ocupa ~6 GB de
-   RAM y ~30 GB de disco durante una hora.
-4. **Puertos:** no publicar nada sin acordarlo. Nada en `0.0.0.0`: los
-   endpoints de ORDS son anónimos.
-5. **Nada fuera de nuestra carpeta** (p. ej. `~/oracle19-poc`): ni
-   paquetes del sistema, ni configuración de Docker, ni servicios.
-6. **Preguntas pendientes al jefe:** para qué es el servidor (¿máquina de
-   construcción, base compartida para los compañeros, o solo para dejar
-   el `.tar.gz`?), cuánto disco y RAM se pueden usar, y qué puertos.
+   `free -h`, `docker ps`) y avisar. Corre **producción real** (portal de
+   pago, `login-svc`, `traefik` en :80, `mongodb`, `redis`, `grafana`) y
+   solo hay ~5 GB de RAM libres de 7,3.
+4. **Memoria: siempre con tope de 4 GB, sin swap extra.** Builds con
+   `servidor/build_servidor.sh` (= `MEM_LIMIT=4g`); el lab con
+   `compose.servidor.yaml` (`mem_limit: 4g`). Si algo se pasa, muere lo
+   nuestro y no lo de otros. Pico real de un build: ~3,3 GB.
+5. **Lab y build nunca a la vez:** no caben (~3 GB + ~3,3 GB).
+   `build_servidor.sh` se niega si el lab corre.
+6. **Puertos:** no publicar nada sin acordarlo. Solo en `127.0.0.1`,
+   nunca `0.0.0.0` (los endpoints de ORDS son anónimos). Desde el
+   notebook, por túnel SSH. Ya ocupados por otros: 80, 3000, 6379, 8000,
+   8081, 8086, 27017.
+7. **Nada fuera de nuestras carpetas** (`~/oracle19-poc`,
+   `~/oracle19-lab-ords`): ni paquetes del sistema, ni servicios, ni la
+   **configuración de Docker**. En particular, no mover el data-root a
+   `/home` ni reiniciar Docker: bajaría la producción.
+8. **Sin atajos de permisos:** nada de `sudo`, ni entrar como el
+   usuario `desarrollo`. Si falta un permiso, se le pide al
+   administrador (así se resolvió el grupo `docker`). La contraseña
+   nunca va en el chat: se entra con la llave.
+9. **Ojo con `autoheal`** (`AUTOHEAL_CONTAINER_LABEL=all`): reinicia a la
+   fuerza cualquier contenedor *unhealthy*, también los nuestros. Para
+   pruebas con la base abajo, lab sin healthcheck
+   (`compose.sin-healthcheck.yaml`), y volver a la normal al terminar.
+10. **Para qué es** (decidido el 29-sep): solo máquina de trabajo propia
+    (construir, `.tar.gz`, probar). Nada queda corriendo para otros.
+    Sigue pendiente preguntarle al jefe cuánto disco se puede usar.
+
+Estas reglas son **del servidor**. En el notebook (Docker Desktop
+propio) sí se puede limpiar con `prune`.
 
 ---
 
